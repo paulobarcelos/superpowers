@@ -118,6 +118,7 @@ start_session() {
     exit 1
   fi
   mkdir -p "$dir"
+  local logFile="$dir/stdout.log"
 
   cp "$prompt_file" "$dir/prompt.txt"
   if [[ -n "$note" ]]; then
@@ -158,8 +159,8 @@ cleanup_tmux() {
 
 run_cmd_interactive() {
   set +e
-  codex "\$PROMPT" --yolo 2> >(tee -a "\$STDERR_LOG" >&2) | tee -a "\$STDOUT_LOG"
-  local rc=\${PIPESTATUS[0]}
+  codex "\$PROMPT" --yolo 2> >(tee -a "\$STDERR_LOG" >&2)
+  local rc=\$?
   set -e
   printf '{"finished_at":"%s","exit_code":%d}\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$rc" >"\$STATUS_FILE"
   cleanup_tmux
@@ -168,8 +169,8 @@ run_cmd_interactive() {
 
 run_cmd_exec() {
   set +e
-  codex exec "\$PROMPT" --yolo -o "\$FINAL_FILE" 2> >(tee -a "\$STDERR_LOG" >&2) | tee -a "\$STDOUT_LOG"
-  local rc=\${PIPESTATUS[0]}
+  codex exec "\$PROMPT" --yolo -o "\$FINAL_FILE" 2> >(tee -a "\$STDERR_LOG" >&2)
+  local rc=\$?
   set -e
   printf '{"finished_at":"%s","exit_code":%d}\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$rc" >"\$STATUS_FILE"
   cleanup_tmux
@@ -215,6 +216,13 @@ with (session_dir / "meta.json").open("w") as fh:
 PY
 
   tmux new-session -d -s "$session" "bash '$dir/run-task.sh'"
+
+  printf -v pipe_cmd "cat >> %q" "$logFile"
+  if command -v stdbuf >/dev/null 2>&1; then
+    tmux pipe-pane -o -t "${session}:0.0" "stdbuf -oL -eL $pipe_cmd"
+  else
+    tmux pipe-pane -o -t "${session}:0.0" "$pipe_cmd"
+  fi
 
   cat <<EOF
 Session:   $session
