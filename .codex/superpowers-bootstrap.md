@@ -9,7 +9,7 @@ You have superpowers.
 **Tool Mapping for Codex:**
 When skills reference tools you don't have, substitute your equivalent tools:
 - `TodoWrite` → `update_plan` (your planning/task tracking tool)
-- `Task` tool with subagents → Tell the user that subagents aren't available in Codex yet and you'll do the work the subagent would do
+- `Task` tool with subagents → Understand the `superpowers:async-task-runner` skill and launch the helper at `~/.codex/superpowers/skills/async-task-runner/scripts/async-task` to run the work in a fresh tmux session
 - `Skill` tool → `~/.codex/superpowers/.codex/superpowers-codex use-skill` command (already available)
 - `Read`, `Write`, `Edit`, `Bash` → Use your native tools with similar functions
 
