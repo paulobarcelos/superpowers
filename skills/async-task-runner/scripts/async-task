@@ -1,0 +1,407 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF_PATH="$0"
+TASKS_ROOT=${TASKS_ROOT:-.async-tasks}
+
+usage() {
+  cat <<EOF
+Usage: ${SELF_PATH} <command> [options]
+
+Commands:
+  start <session> --prompt-file <file> [--cwd <dir>] [--interactive] [--human-note <text>]
+        Launch a Codex task in tmux, logging artifacts under .async-tasks/<session>/
+  status [<session>]       Show summary for all sessions or a specific one
+  logs <session> [stdout|stderr] [--lines N]   Print latest log lines without blocking
+  kill <session> [--clear] Stop tmux session; optionally remove artifacts
+  init                     Ensure tasks root exists and print quick help
+  help                     Show this message
+
+Environment:
+  TASKS_ROOT   Override artifact directory (default: .async-tasks)
+EOF
+}
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "ERROR: missing required command: $1" >&2
+    exit 2
+  fi
+}
+
+timestamp_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+ensure_tasks_root() {
+  mkdir -p "$TASKS_ROOT"
+}
+
+session_dir() {
+  local session=$1
+  echo "$TASKS_ROOT/$session"
+}
+
+require_session_dir() {
+  local dir
+  dir=$(session_dir "$1")
+  if [[ ! -d "$dir" ]]; then
+    echo "ERROR: session artifacts not found at $dir" >&2
+    exit 1
+  fi
+}
+
+is_tmux_running() {
+  local session=$1
+  if tmux has-session -t "$session" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+start_session() {
+  local session run_dir interactive=0 prompt_file="" note="" prompt_source="file"
+
+  if [[ $# -lt 1 ]]; then
+    usage; exit 1
+  fi
+  session=$1; shift
+  if [[ -z "$session" ]]; then
+    echo "ERROR: session name required" >&2; exit 1
+  fi
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --prompt-file)
+        [[ $# -ge 2 ]] || { echo "ERROR: --prompt-file requires path" >&2; exit 1; }
+        prompt_file=$2; shift 2;;
+      --cwd)
+        [[ $# -ge 2 ]] || { echo "ERROR: --cwd requires directory" >&2; exit 1; }
+        run_dir=$(cd "$2" && pwd); shift 2;;
+      --interactive)
+        interactive=1; shift;;
+      --human-note)
+        [[ $# -ge 2 ]] || { echo "ERROR: --human-note requires text" >&2; exit 1; }
+        note=$2; shift 2;;
+      --prompt)
+        [[ $# -ge 2 ]] || { echo "ERROR: --prompt requires text" >&2; exit 1; }
+        prompt_file=$(mktemp)
+        printf "%s" "$2" >"$prompt_file"
+        prompt_source="inline"
+        shift 2;;
+      --)
+        shift; break;;
+      -*)
+        echo "ERROR: unknown option $1" >&2; exit 1;;
+      *)
+        echo "ERROR: unexpected argument $1" >&2; exit 1;;
+    esac
+  done
+
+  if [[ -z "${run_dir:-}" ]]; then
+    run_dir=$PWD
+  fi
+
+  if [[ -z "$prompt_file" ]]; then
+    echo "ERROR: --prompt-file or --prompt required" >&2
+    exit 1
+  fi
+
+  need_cmd tmux
+  need_cmd codex
+  ensure_tasks_root
+
+  local dir
+  dir=$(session_dir "$session")
+  if [[ -e "$dir" ]]; then
+    echo "ERROR: artifacts already exist for session $session ($dir)" >&2
+    exit 1
+  fi
+  mkdir -p "$dir"
+
+  cp "$prompt_file" "$dir/prompt.txt"
+  if [[ -n "$note" ]]; then
+    cat <<EOF >"$dir/note.txt"
+$note
+EOF
+  else
+    : >"$dir/note.txt"
+  fi
+
+  local quoted_run_dir quoted_session
+  quoted_run_dir=$(printf '%q' "$run_dir")
+  quoted_session=$(printf '%q' "$session")
+
+  cat >"$dir/run-task.sh" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+LOG_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+RUN_DIR=$quoted_run_dir
+SESSION_NAME=$quoted_session
+PROMPT_FILE="\$LOG_DIR/prompt.txt"
+INTERACTIVE=$interactive
+STDOUT_LOG="\$LOG_DIR/stdout.log"
+STDERR_LOG="\$LOG_DIR/stderr.log"
+FINAL_FILE="\$LOG_DIR/stdout.final"
+STATUS_FILE="\$LOG_DIR/status.json"
+NOTE_FILE="\$LOG_DIR/note.txt"
+
+touch "\$STDOUT_LOG" "\$STDERR_LOG"
+cd "\$RUN_DIR"
+PROMPT=\$(cat "\$PROMPT_FILE")
+
+cleanup_tmux() {
+  if command -v tmux >/dev/null 2>&1; then
+    tmux kill-session -t "\$SESSION_NAME" >/dev/null 2>&1 || true
+  fi
+}
+
+run_cmd_interactive() {
+  set +e
+  codex "\$PROMPT" --yolo 2> >(tee -a "\$STDERR_LOG" >&2) | tee -a "\$STDOUT_LOG"
+  local rc=\${PIPESTATUS[0]}
+  set -e
+  printf '{"finished_at":"%s","exit_code":%d}\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$rc" >"\$STATUS_FILE"
+  cleanup_tmux
+  exit "\$rc"
+}
+
+run_cmd_exec() {
+  set +e
+  codex exec "\$PROMPT" --yolo -o "\$FINAL_FILE" 2> >(tee -a "\$STDERR_LOG" >&2) | tee -a "\$STDOUT_LOG"
+  local rc=\${PIPESTATUS[0]}
+  set -e
+  printf '{"finished_at":"%s","exit_code":%d}\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$rc" >"\$STATUS_FILE"
+  cleanup_tmux
+  exit "\$rc"
+}
+
+if [[ "\$INTERACTIVE" -eq 1 ]]; then
+  run_cmd_interactive
+else
+  run_cmd_exec
+fi
+EOF
+  chmod +x "$dir/run-task.sh"
+
+  if [[ "$prompt_source" == "inline" ]]; then
+    rm -f "$prompt_file"
+  fi
+
+  SESSION="$session" SESSION_DIR="$dir" RUN_DIR="$run_dir" INTERACTIVE="$interactive" PROMPT_SOURCE="$prompt_source" python3 - <<'PY'
+import json, os, pathlib, datetime
+session_dir = pathlib.Path(os.environ["SESSION_DIR"])
+note_file = session_dir / "note.txt"
+note = note_file.read_text().strip()
+prompt = (session_dir / "prompt.txt").read_text()
+meta = {
+    "session": os.environ["SESSION"],
+    "started_at": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+    "run_dir": os.environ["RUN_DIR"],
+    "interactive": os.environ["INTERACTIVE"] == "1",
+    "prompt_source": os.environ["PROMPT_SOURCE"],
+    "prompt_lines": min(len(prompt.splitlines()), 50),
+}
+if note:
+    meta["human_note"] = note
+preview = []
+for line in prompt.splitlines():
+    preview.append(line.strip())
+    if len(preview) >= 3:
+        break
+meta["prompt_preview"] = " | ".join(preview)[:160]
+with (session_dir / "meta.json").open("w") as fh:
+    json.dump(meta, fh, indent=2)
+PY
+
+  tmux new-session -d -s "$session" "bash '$dir/run-task.sh'"
+
+  cat <<EOF
+Session:   $session
+Artifacts: $dir
+Run dir:   $run_dir
+Interactive: $interactive
+Started:   $(timestamp_utc)
+
+Next steps:
+  - Check progress: ${SELF_PATH} status $session
+  - View logs:      ${SELF_PATH} logs $session [stdout|stderr]
+  - Inspect meta:   $dir/meta.json
+EOF
+}
+
+status_all() {
+  ensure_tasks_root
+  local found=0
+  for dir in "$TASKS_ROOT"/*; do
+    [[ -d "$dir" ]] || continue
+    local session
+    session=$(basename "$dir")
+    status_one "$session"
+    found=1
+  done
+  if [[ $found -eq 0 ]]; then
+    echo "No async task sessions under $TASKS_ROOT"
+  fi
+}
+
+status_one() {
+  local session=$1
+  local dir meta running stdout_log stderr_log final_file status_json
+  dir=$(session_dir "$session")
+  if [[ ! -d "$dir" ]]; then
+    echo "No artifacts for session $session" >&2
+    return 1
+  fi
+  meta="$dir/meta.json"
+  running="stopped"
+  if is_tmux_running "$session"; then
+    running="running"
+  fi
+  stdout_log="$dir/stdout.log"
+  stderr_log="$dir/stderr.log"
+  final_file="$dir/stdout.final"
+  status_json="$dir/status.json"
+
+  SESSION="$session" META="$meta" RUNNING="$running" STDOUT_LOG="$stdout_log" STDERR_LOG="$stderr_log" FINAL_FILE="$final_file" STATUS_JSON="$status_json" python3 - <<'PY'
+import json, os, pathlib, sys
+session = os.environ["SESSION"]
+meta_path = pathlib.Path(os.environ["META"])
+running = os.environ["RUNNING"]
+stdout_path = pathlib.Path(os.environ["STDOUT_LOG"])
+stderr_path = pathlib.Path(os.environ["STDERR_LOG"])
+final_path = pathlib.Path(os.environ["FINAL_FILE"])
+status_path = pathlib.Path(os.environ["STATUS_JSON"])
+meta = {}
+if meta_path.exists():
+    meta = json.loads(meta_path.read_text())
+
+def fmt_ts(path):
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+
+print(f"{session}  [{running}]  started:{meta.get('started_at', '?')}  dir:{meta.get('run_dir','?')}")
+if meta.get("human_note"):
+    print(f"  human-note: {meta['human_note']}")
+if meta.get("prompt_preview"):
+    print(f"  prompt: {meta['prompt_preview']}")
+stdout_exists = stdout_path.exists()
+stderr_exists = stderr_path.exists()
+final_exists = final_path.exists()
+status_exists = status_path.exists()
+if stdout_exists or stderr_exists:
+    last_stdout = stdout_path.stat().st_mtime if stdout_exists else None
+    last_stderr = stderr_path.stat().st_mtime if stderr_exists else None
+    if last_stdout:
+        print(f"  stdout.log: {stdout_path} (updated)")
+    else:
+        print(f"  stdout.log: {stdout_path} (missing)")
+    if last_stderr:
+        print(f"  stderr.log: {stderr_path} (updated)")
+    else:
+        print(f"  stderr.log: {stderr_path} (missing)")
+if final_exists:
+    print(f"  stdout.final: {final_path}")
+if status_exists:
+    status = json.loads(status_path.read_text())
+    print(f"  exit: {status.get('exit_code')}  finished:{status.get('finished_at')}")
+PY
+}
+
+print_logs() {
+  local session=$1
+  local stream=${2:-stdout}
+  shift || true
+  shift || true
+  local lines=60
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --lines)
+        [[ $# -ge 2 ]] || { echo "ERROR: --lines requires a value" >&2; exit 1; }
+        lines=$2
+        shift 2;;
+      *)
+        echo "ERROR: unknown option $1" >&2
+        exit 1;;
+    esac
+  done
+  require_session_dir "$session"
+  local dir log
+  dir=$(session_dir "$session")
+  case "$stream" in
+    stdout) log="$dir/stdout.log";;
+    stderr) log="$dir/stderr.log";;
+    *)
+      echo "ERROR: stream must be stdout or stderr" >&2
+      exit 1;;
+  esac
+  if [[ ! -f "$log" ]]; then
+    echo "Log file not found: $log" >&2
+    exit 1
+  fi
+  echo "==> $log (last $lines lines)"
+  tail -n "$lines" "$log"
+}
+
+kill_session() {
+  local session=$1
+  shift || true
+  local clear=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --clear) clear=1; shift;;
+      *) echo "ERROR: unknown option $1" >&2; exit 1;;
+    esac
+  done
+  if is_tmux_running "$session"; then
+    tmux kill-session -t "$session"
+    echo "Killed tmux session $session"
+  else
+    echo "tmux session $session not running"
+  fi
+  if [[ $clear -eq 1 ]]; then
+    local dir
+    dir=$(session_dir "$session")
+    if [[ -d "$dir" ]]; then
+      rm -rf "$dir"
+      echo "Cleared artifacts at $dir"
+    else
+      echo "No artifacts to clear for $session"
+    fi
+  fi
+}
+
+cmd=${1:-help}
+shift || true
+
+case "$cmd" in
+  help) usage;;
+  init)
+    ensure_tasks_root
+    echo "Initialized async task root at $TASKS_ROOT"
+    echo "Add '/$TASKS_ROOT/' to .gitignore if not already ignored."
+    ;;
+  start) start_session "$@";;
+  status)
+    if [[ $# -eq 0 ]]; then
+      status_all
+    else
+      status_one "$1"
+    fi
+    ;;
+  logs)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    print_logs "$@"
+    ;;
+  kill)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    kill_session "$@"
+    ;;
+  *)
+    echo "ERROR: unknown command: $cmd" >&2
+    usage
+    exit 1
+    ;;
+esac
