@@ -60,6 +60,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 - `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` – summaries, run directory, note, exit code, timestamps.
 - `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stdout|stderr] [--lines N]` – bounded snapshots; default 60 lines.
 - Humans get one-glance paths: `.async-tasks/<session>/stdout.log`, `.async-tasks/<session>/stdout.final`, `.async-tasks/<session>/stderr.log`, `.async-tasks/<session>/meta.json`.
+- Interactive sessions capture `stdout.log` when the run finishes; rely on tmux for live steering.
 - If the human note requires confirmation, set a reminder (plan item) and pro-actively summarize the latest log segment rather than waiting to be asked.
 - **Agents must not stream logs indefinitely.** Long `tail -f` calls stall the agent. If a human insists on live streaming they can run `tail -f` themselves outside the agent workflow.
 
