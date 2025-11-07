@@ -66,7 +66,7 @@ Tip: interactive sessions should run `/status` once before closing to copy the S
 - `stdout.final` – authoritative final message for autonomous runs; deliver this unless it’s empty/error.
 - `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
 - `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
-- `restart <session> --resume-id <ID>` – kill/recreate the tmux session and run `codex resume <ID>`. Copy the session ID from `/status` inside the pane before exiting so you have it ready.
+- `restart <session> --resume-id <ID>` – kill/recreate the tmux session and run `codex resume <ID> --yolo`. Copy the session ID from `/status` inside the pane before exiting so you have it ready.
 - Humans can always attach to the tmux session directly for interactive steering.
 - Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
 - Need to re-auth or unstick Codex? Run `/status` in the pane, copy the Session ID, then `restart <session> --resume-id <ID>` immediately after killing the old session.

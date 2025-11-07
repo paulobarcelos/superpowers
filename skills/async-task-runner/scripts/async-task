@@ -437,7 +437,7 @@ PY
     tmux kill-session -t "$session" >/dev/null 2>&1 || true
   fi
   tmux new-session -d -s "$session" -c "$meta_run_dir"
-  local resume_cmd="codex resume $resume_id"
+  local resume_cmd="codex resume $resume_id --yolo"
   tmux send-keys -t "${session}:0.0" "$resume_cmd" C-m
   echo "Restarted tmux session $session in $meta_run_dir"
   echo "Resume command: $resume_cmd"
