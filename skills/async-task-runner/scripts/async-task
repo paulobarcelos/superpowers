@@ -401,6 +401,10 @@ restart_session() {
         echo "ERROR: unknown option $1" >&2; exit 1;;
     esac
   done
+  if [[ -z "$resume_id" ]]; then
+    echo "ERROR: restart requires --resume-id <codex_session_id> (run /status inside the pane to copy it)." >&2
+    exit 1
+  fi
   require_session_dir "$session"
   local dir
   dir=$(session_dir "$session")
@@ -433,19 +437,11 @@ PY
     tmux kill-session -t "$session" >/dev/null 2>&1 || true
   fi
   tmux new-session -d -s "$session" -c "$meta_run_dir"
-  local resume_cmd
-  if [[ -n "$resume_id" ]]; then
-    resume_cmd="codex resume $resume_id"
-  else
-    resume_cmd="codex resume --last"
-  fi
+  local resume_cmd="codex resume $resume_id"
   tmux send-keys -t "${session}:0.0" "$resume_cmd" C-m
   echo "Restarted tmux session $session in $meta_run_dir"
   echo "Resume command: $resume_cmd"
   echo "Use 'capture' or tmux attach to inspect progress."
-  if [[ "$interactive_flag" != "1" ]]; then
-    echo "Warning: original session was non-interactive; resume may not behave as expected." >&2
-  fi
 }
 
 kill_session() {

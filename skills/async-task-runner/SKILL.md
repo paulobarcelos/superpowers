@@ -55,6 +55,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 | **Interactive** (human steering) | Human partner attaches via `tmux attach -t <session>` | Drive the subagent directly; parent can run `capture <session>` (default 10 lines) if a quick peek is needed | Human signals completion, parent cleans up on request |
 | **Autonomous** (no oversight) | Parent agent | Periodically run `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` and `logs` for snapshots; notify human on milestones | Parent reports final result from `stdout.final` + exit code |
 
+Tip: interactive sessions should run `/status` once before closing to copy the Session ID (needed for `restart --resume-id <ID>` if Codex must be re-authenticated).
 **Artifacts to expect**
 - Autonomous lane → `stdout.final` (final reply) + optional stderr tail. Use pane capture only when debugging.
 - Interactive lane → live tmux only. Capture snippets via `capture <session>` if you need to quote or inspect progress.
@@ -65,10 +66,10 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 - `stdout.final` – authoritative final message for autonomous runs; deliver this unless it’s empty/error.
 - `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
 - `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
-- `restart <session> [--resume-id ID]` – kill/recreate the tmux session and run `codex resume` (defaults to `--last`). Handy when Codex needs re-auth or credit top-up.
+- `restart <session> --resume-id <ID>` – kill/recreate the tmux session and run `codex resume <ID>`. Copy the session ID from `/status` inside the pane before exiting so you have it ready.
 - Humans can always attach to the tmux session directly for interactive steering.
 - Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
-- Need to re-auth or unstick Codex? Run `restart <session>` (defaults to `codex resume --last`) right after killing the old session so the parent and human stay aligned.
+- Need to re-auth or unstick Codex? Run `/status` in the pane, copy the Session ID, then `restart <session> --resume-id <ID>` immediately after killing the old session.
 - **No `tail -f`.** If someone needs live output, they should attach via tmux themselves.
 
 ## Completion & Cleanup
@@ -89,7 +90,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 | Check status | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` |
 | Tail stderr or stdout snapshot | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stderr|stdout] [--lines N]` |
 | Capture live pane (interactive peek) | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task capture <session> [--lines N] [--output file]` |
-| Restart Codex TUI in same tmux | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task restart <session> [--resume-id ID]` |
+| Restart Codex TUI in same tmux | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task restart <session> --resume-id <ID>` |
 | Stop / remove | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task kill <session> [--clear]` |
 
 ## Common Mistakes & Counters
