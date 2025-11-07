@@ -405,21 +405,27 @@ restart_session() {
   local dir
   dir=$(session_dir "$session")
   local meta_run_dir interactive_flag
-  readarray -t meta_lines < <(python3 - "$dir"<<'PY'
-import json, pathlib, sys, os
+  local meta_info
+  meta_info=$(python3 - "$dir"<<'PY'
+import json, pathlib, sys
 base = pathlib.Path(sys.argv[1])
 path = base / "meta.json"
-if not path.exists():
-    print("")
-    print("0")
-else:
-    data = json.loads(path.read_text())
-    print(data.get("run_dir",""))
-    print("1" if data.get("interactive") else "0")
+run_dir = ""
+interactive = False
+if path.exists():
+    raw = json.loads(path.read_text())
+    run_dir = raw.get("run_dir","")
+    interactive = bool(raw.get("interactive"))
+print(run_dir)
+print("1" if interactive else "0")
 PY
 )
-  meta_run_dir=${meta_lines[0]}
-  interactive_flag=${meta_lines[1]:-0}
+  local meta_run_dir interactive_flag
+  meta_run_dir=$(printf '%s\n' "$meta_info" | sed -n '1p')
+  interactive_flag=$(printf '%s\n' "$meta_info" | sed -n '2p')
+  meta_run_dir=${meta_run_dir:-}
+  interactive_flag=${interactive_flag//$'\r'/}
+  interactive_flag=${interactive_flag:-0}
   if [[ -z "$meta_run_dir" ]]; then
     meta_run_dir=$(pwd)
   fi
