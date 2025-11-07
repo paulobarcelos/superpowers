@@ -34,7 +34,10 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
    - Whether human approval is required mid-run.
    - Explicit deliverables for the final response (don’t mention `stdout.final`; just describe the result—this helper captures the last message automatically).
 4. **Capture touchpoints**: note what humans should monitor (e.g. “Ping me when index rebuild hits 50%”).
-5. **Start the session** (from the repo root unless you intentionally change `--cwd`):
+5. **State the autonomy level explicitly**:
+   - If this run is autonomous, say so in the prompt (e.g. “You will run autonomously; the human will not answer. Make decisions yourself.”) and remind the subagent to follow the `autonomous-subagent` discipline.
+   - If it’s interactive, emphasise how/when the human may step in.
+6. **Start the session** (from the repo root unless you intentionally change `--cwd`):
    ```bash
    ~/.codex/superpowers/skills/async-task-runner/scripts/async-task start db-vacuum \
      --prompt-file /tmp/prompt-db-vacuum.txt \
@@ -42,7 +45,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
    ```
    - Add `--cwd /path/to/worktree` when the task must run elsewhere.
    - Add `--interactive` when you need the Codex TUI inside tmux (logs still capture output).
-6. **Immediately report** back in the main conversation:
+7. **Immediately report** back in the main conversation:
    - Session name (e.g. `db-vacuum`)
    - Run directory
    - Success criteria / definition of done
@@ -57,7 +60,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 
 Tip: interactive sessions should run `/status` once before closing to copy the Session ID (needed for `restart --resume-id <ID>` if Codex must be re-authenticated).
 **Artifacts to expect**
-- Autonomous lane → `stdout.final` (final reply) + optional stderr tail. Use pane capture only when debugging.
+- Autonomous lane → `stdout.final` (final reply) + optional stderr tail. Use pane capture only when debugging, and remind the subagent it must treat silence as confirmation to proceed.
 - Interactive lane → live tmux only. Capture snippets via `capture <session>` if you need to quote or inspect progress.
 
 ## Monitoring & Touchpoints
