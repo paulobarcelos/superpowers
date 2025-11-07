@@ -147,7 +147,6 @@ STDERR_LOG="\$LOG_DIR/stderr.log"
 FINAL_FILE="\$LOG_DIR/stdout.final"
 STATUS_FILE="\$LOG_DIR/status.json"
 NOTE_FILE="\$LOG_DIR/note.txt"
-TAIL_LINES="\${CAPTURE_LINES:-10}"
 
 touch "\$STDOUT_LOG" "\$STDERR_LOG"
 cd "\$RUN_DIR"
@@ -155,7 +154,7 @@ PROMPT=\$(cat "\$PROMPT_FILE")
 
 capture_logs() {
   if command -v tmux >/dev/null 2>&1; then
-    tmux capture-pane -p -J -S -"\$TAIL_LINES" -t "\$SESSION_NAME":0 > "\$STDOUT_LOG" || true
+    tmux capture-pane -p -J -S -10 -t "\$SESSION_NAME":0 > "\$STDOUT_LOG" || true
   fi
 }
 

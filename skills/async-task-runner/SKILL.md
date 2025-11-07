@@ -1,5 +1,5 @@
 name: async-task-runner
-description: Use when Codex should run work in a fresh context outside the current turn—launch the dedicated tmux session via skills/async-task-runner/scripts/async-task, keep it steerable, and surface results without polluting the main conversation.
+description: Use when work must run in a fresh tmux context outside the current turn—launch it with skills/async-task-runner/scripts/async-task, harvest the final message for autonomous runs, and snapshot the tmux pane on demand when you or the human need a quick peek.
 ---
 
 # Async Task Runner
