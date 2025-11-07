@@ -52,22 +52,27 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 
 | Lane | Who watches | What they do | When complete |
 | ---- | ----------- | ------------ | -------------- |
-| **Interactive** (human steering) | Human partner attaches via `tmux attach -t <session>` | Drive the subagent directly; optionally ask parent for summaries | Human signals completion, parent cleans up on request |
+| **Interactive** (human steering) | Human partner attaches via `tmux attach -t <session>` | Drive the subagent directly; parent can run `capture <session>` (default 10 lines) if a quick peek is needed | Human signals completion, parent cleans up on request |
 | **Autonomous** (no oversight) | Parent agent | Periodically run `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` and `logs` for snapshots; notify human on milestones | Parent reports final result from `stdout.final` + exit code |
+
+**Artifacts to expect**
+- Autonomous lane → `stdout.final` (final reply) + optional stderr tail. Use pane capture only when debugging.
+- Interactive lane → live tmux only. Capture snippets via `capture <session>` if you need to quote or inspect progress.
 
 ## Monitoring & Touchpoints
 
-- `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` – summaries, run directory, note, exit code, timestamps.
-- `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stdout|stderr] [--lines N]` – bounded snapshots; default 60 lines.
-- Humans get one-glance paths: `.async-tasks/<session>/stdout.log`, `.async-tasks/<session>/stdout.final`, `.async-tasks/<session>/stderr.log`, `.async-tasks/<session>/meta.json`.
-- Interactive sessions capture `stdout.log` when the run finishes; rely on tmux for live steering.
-- If the human note requires confirmation, set a reminder (plan item) and pro-actively summarize the latest log segment rather than waiting to be asked.
-- **Agents must not stream logs indefinitely.** Long `tail -f` calls stall the agent. If a human insists on live streaming they can run `tail -f` themselves outside the agent workflow.
+- `status` – quick heartbeat (dir, note, exit code).
+- `stdout.final` – authoritative final message for autonomous runs; deliver this unless it’s empty/error.
+- `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
+- `capture <session> [--lines N]` – snapshot the tmux pane (default last 10 lines) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
+- Humans can always attach to the tmux session directly for interactive steering.
+- Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
+- **No `tail -f`.** If someone needs live output, they should attach via tmux themselves.
 
 ## Completion & Cleanup
 
 1. `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` → ensure it reads `[stopped]`, capture exit code + finished timestamp.
-2. Summarize results back to the human using the data under `.async-tasks/<session>/`.
+2. Summarize results back to the human using the data under `.async-tasks/<session>/`—lead with `stdout.final` for autonomous runs; for interactive runs cite your own summary or provide a captured snippet.
 3. If more work is needed, either:
    - Restart with a new session name (keep artifacts isolated), **or**
    - Bring the task back inline if it now fits a quick turn.
@@ -80,7 +85,8 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 | Prep workspace once | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task init` |
 | Launch async job | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task start <session> --prompt-file <file> [--cwd <dir>] [--human-note <text>] [--interactive]` |
 | Check status | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` |
-| Show recent logs | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stdout|stderr] [--lines N]` |
+| Tail stderr or stdout snapshot | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stderr|stdout] [--lines N]` |
+| Capture live pane (interactive peek) | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task capture <session> [--lines N] [--output file]` |
 | Stop / remove | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task kill <session> [--clear]` |
 
 ## Common Mistakes & Counters
@@ -98,7 +104,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 2. Launch:  
    `~/.codex/superpowers/skills/async-task-runner/scripts/async-task start issue42-vacuum --prompt-file /tmp/prompt-db-vacuum.txt --cwd .worktrees/issue-42 --human-note "Human will attach; parent only summarize if requested."`
 3. Post a status message referencing session `issue42-vacuum`, run dir `.worktrees/issue-42`, definition of done, and commands `status issue42-vacuum` / `logs issue42-vacuum`.
-4. At halfway mark, read `.async-tasks/issue42-vacuum/stdout.log` (or run `logs` for a snapshot), summarize the latest progress, and request the human’s approval.
+4. At halfway mark, run `.../scripts/async-task capture issue42-vacuum --lines 20` (or have the human attach) to summarize latest progress and request approval.
 5. When `status` reports `[stopped] exit:0`, read `stdout.final`, deliver the summary, then `kill --clear`.
 
 ## Red Flags – Stop and Re-evaluate

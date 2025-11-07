@@ -10,9 +10,10 @@ Usage: ${SELF_PATH} <command> [options]
 
 Commands:
   start <session> --prompt-file <file> [--cwd <dir>] [--interactive] [--human-note <text>]
-        Launch a Codex task in tmux, logging artifacts under .async-tasks/<session>/
+        Launch a Codex task in tmux; artifacts under .async-tasks/<session>/
   status [<session>]       Show summary for all sessions or a specific one
-  logs <session> [stdout|stderr] [--lines N]   Print latest log lines without blocking
+  logs <session> [stdout|stderr] [--lines N]   Print tails of stored stdout snapshot or stderr log
+  capture <session> [--lines N] [--output <file>]  Snapshot the live tmux pane (interactive debugging)
   kill <session> [--clear] Stop tmux session; optionally remove artifacts
   init                     Ensure tasks root exists and print quick help
   help                     Show this message
@@ -146,6 +147,7 @@ STDERR_LOG="\$LOG_DIR/stderr.log"
 FINAL_FILE="\$LOG_DIR/stdout.final"
 STATUS_FILE="\$LOG_DIR/status.json"
 NOTE_FILE="\$LOG_DIR/note.txt"
+TAIL_LINES="\${CAPTURE_LINES:-10}"
 
 touch "\$STDOUT_LOG" "\$STDERR_LOG"
 cd "\$RUN_DIR"
@@ -153,7 +155,7 @@ PROMPT=\$(cat "\$PROMPT_FILE")
 
 capture_logs() {
   if command -v tmux >/dev/null 2>&1; then
-    tmux capture-pane -p -J -t "\$SESSION_NAME":0 > "\$STDOUT_LOG" || true
+    tmux capture-pane -p -J -S -"\$TAIL_LINES" -t "\$SESSION_NAME":0 > "\$STDOUT_LOG" || true
   fi
 }
 
@@ -300,17 +302,10 @@ stdout_exists = stdout_path.exists()
 stderr_exists = stderr_path.exists()
 final_exists = final_path.exists()
 status_exists = status_path.exists()
-if stdout_exists or stderr_exists:
-    last_stdout = stdout_path.stat().st_mtime if stdout_exists else None
-    last_stderr = stderr_path.stat().st_mtime if stderr_exists else None
-    if last_stdout:
-        print(f"  stdout.log: {stdout_path} (updated)")
-    else:
-        print(f"  stdout.log: {stdout_path} (missing)")
-    if last_stderr:
-        print(f"  stderr.log: {stderr_path} (updated)")
-    else:
-        print(f"  stderr.log: {stderr_path} (missing)")
+if stdout_exists:
+    print(f"  stdout.log: {stdout_path} (snapshot)")
+if stderr_exists:
+    print(f"  stderr.log: {stderr_path} (streamed)")
 if final_exists:
     print(f"  stdout.final: {final_path}")
 if status_exists:
@@ -321,7 +316,7 @@ PY
 
 print_logs() {
   local session=$1
-  local stream=${2:-stdout}
+  local stream=${2:-stderr}
   shift || true
   shift || true
   local lines=60
@@ -352,6 +347,45 @@ print_logs() {
   fi
   echo "==> $log (last $lines lines)"
   tail -n "$lines" "$log"
+}
+
+capture_session() {
+  local session=$1
+  shift || true
+  local lines=10 output="" quiet=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --lines)
+        [[ $# -ge 2 ]] || { echo "ERROR: --lines requires a value" >&2; exit 1; }
+        lines=$2; shift 2;;
+      --output)
+        [[ $# -ge 2 ]] || { echo "ERROR: --output requires path" >&2; exit 1; }
+        output=$2; shift 2;;
+      --quiet)
+        quiet=1; shift;;
+      *)
+        echo "ERROR: unknown option $1" >&2
+        exit 1;;
+    esac
+  done
+  if ! is_tmux_running "$session"; then
+    echo "tmux session $session not running; capture is only available while active." >&2
+    exit 1
+  fi
+  local dir
+  dir=$(session_dir "$session")
+  local dest="${output:-$dir/stdout.log}"
+  local tmp
+  tmp=$(mktemp)
+  if ! tmux capture-pane -p -J -S -"$lines" -t "${session}:0.0" >"$tmp"; then
+    rm -f "$tmp"
+    echo "Failed to capture pane for $session" >&2
+    exit 1
+  fi
+  mv "$tmp" "$dest"
+  if [[ $quiet -eq 0 ]]; then
+    cat "$dest"
+  fi
 }
 
 kill_session() {
@@ -403,6 +437,14 @@ case "$cmd" in
   logs)
     if [[ $# -lt 1 ]]; then usage; exit 1; fi
     print_logs "$@"
+    ;;
+  capture)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    capture_session "$@"
+    ;;
+  capture)
+    if [[ $# -lt 1 ]]; then usage; exit 1; fi
+    capture_session "$@"
     ;;
   kill)
     if [[ $# -lt 1 ]]; then usage; exit 1; fi
