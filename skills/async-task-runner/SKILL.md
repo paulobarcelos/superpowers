@@ -28,11 +28,11 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 ## Launch Checklist (GREEN)
 
 1. **Confirm async offload**: default to using this helper; only stay inline if the task must finish immediately inside the current turn.
-2. **Agree oversight** with the human partner: confirm whether they plan to attach (interactive) or expect status pings only (autonomous). Record this in your prompt/note.
+2. **Agree oversight + cadence** with the human partner: confirm whether they plan to attach (interactive) or expect status pings only (autonomous), and settle on concrete check-in times. If you promise to “monitor,” set a reminder (plan item) and actually re-check via `capture`/`logs` at the agreed interval.
 3. **Draft the prompt** in a scratch file (e.g. `/tmp/prompt-db-vacuum.txt`) with:
    - Objective, definition of done, runtime expectations.
    - Whether human approval is required mid-run.
-   - Explicit deliverables for `stdout.final`.
+   - Explicit deliverables for the final response (don’t mention `stdout.final`; just describe the result—this helper captures the last message automatically).
 4. **Capture touchpoints**: note what humans should monitor (e.g. “Ping me when index rebuild hits 50%”).
 5. **Start the session** (from the repo root unless you intentionally change `--cwd`):
    ```bash
@@ -63,12 +63,13 @@ Tip: interactive sessions should run `/status` once before closing to copy the S
 ## Monitoring & Touchpoints
 
 - `status` – quick heartbeat (dir, note, exit code).
-- `stdout.final` – authoritative final message for autonomous runs; deliver this unless it’s empty/error.
+- `stdout.final` – authoritative final message for autonomous runs; it is captured automatically, so just instruct the subagent on what to output (don’t mention `stdout.final` explicitly).
 - `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
 - `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
 - `restart <session> --resume-id <ID>` – kill/recreate the tmux session and run `codex resume <ID> --yolo`. Copy the session ID from `/status` inside the pane before exiting so you have it ready.
 - Humans can always attach to the tmux session directly for interactive steering.
 - Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
+- If you say you’ll “monitor” an autonomous run, schedule the check (update your plan) and use `logs`/`capture` at that time. Ask the human before polling aggressively to avoid needless context churn.
 - Need to re-auth or unstick Codex? Run `/status` in the pane, copy the Session ID, then `restart <session> --resume-id <ID>` immediately after killing the old session.
 - **No `tail -f`.** If someone needs live output, they should attach via tmux themselves.
 
