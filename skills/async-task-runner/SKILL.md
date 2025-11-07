@@ -64,9 +64,11 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 - `status` – quick heartbeat (dir, note, exit code).
 - `stdout.final` – authoritative final message for autonomous runs; deliver this unless it’s empty/error.
 - `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
-- `capture <session> [--lines N]` – snapshot the tmux pane (default last 10 lines) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
+- `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
+- `restart <session> [--resume-id ID]` – kill/recreate the tmux session and run `codex resume` (defaults to `--last`). Handy when Codex needs re-auth or credit top-up.
 - Humans can always attach to the tmux session directly for interactive steering.
 - Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
+- Need to re-auth or unstick Codex? Run `restart <session>` (defaults to `codex resume --last`) right after killing the old session so the parent and human stay aligned.
 - **No `tail -f`.** If someone needs live output, they should attach via tmux themselves.
 
 ## Completion & Cleanup
@@ -87,6 +89,7 @@ Only keep work inline when you explicitly need real-time back-and-forth within t
 | Check status | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` |
 | Tail stderr or stdout snapshot | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stderr|stdout] [--lines N]` |
 | Capture live pane (interactive peek) | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task capture <session> [--lines N] [--output file]` |
+| Restart Codex TUI in same tmux | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task restart <session> [--resume-id ID]` |
 | Stop / remove | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task kill <session> [--clear]` |
 
 ## Common Mistakes & Counters
