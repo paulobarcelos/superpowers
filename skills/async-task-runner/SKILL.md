@@ -69,6 +69,8 @@ Tip: interactive sessions should run `/status` once before closing to copy the S
 - `stdout.final` – authoritative final message for autonomous runs; it is captured automatically, so just instruct the subagent on what to output (don’t mention `stdout.final` explicitly).
 - `logs … stderr` – tail of stderr for spotting runtime errors without opening the pane.
 - `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
+- `capture <session> [--lines N]` – snapshot the tmux pane (recommend 10 lines to start) when you need to peek. Use repeatedly to scroll further back (increase `--lines` if necessary).
+- `say <session> "message"` – inject a follow-up message into an interactive subagent (uses tmux send-keys). Only available for interactive sessions.
 - `restart <session> --resume-id <ID>` – kill/recreate the tmux session and run `codex resume <ID> --yolo`. Copy the session ID from `/status` inside the pane before exiting so you have it ready.
 - Humans can always attach to the tmux session directly for interactive steering.
 - Keep snapshots short by default (10 lines) to preserve parent context; only increase when debugging.
@@ -94,6 +96,7 @@ Tip: interactive sessions should run `/status` once before closing to copy the S
 | Check status | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task status <session>` |
 | Tail stderr or stdout snapshot | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task logs <session> [stderr|stdout] [--lines N]` |
 | Capture live pane (interactive peek) | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task capture <session> [--lines N] [--output file]` |
+| Send follow-up message (interactive) | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task say <session> "message"` |
 | Restart Codex TUI in same tmux | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task restart <session> --resume-id <ID>` |
 | Stop / remove | `~/.codex/superpowers/skills/async-task-runner/scripts/async-task kill <session> [--clear]` |
 

@@ -11,10 +11,15 @@ Usage: ${SELF_PATH} <command> [options]
 Commands:
   start <session> --prompt-file <file> [--cwd <dir>] [--interactive] [--human-note <text>]
         Launch a Codex task in tmux; artifacts under .async-tasks/<session>/
-  status [<session>]       Show summary for all sessions or a specific one
-  logs <session> [stdout|stderr] [--lines N]   Print tails of stored stdout snapshot or stderr log
-  capture <session> [--lines N] [--output <file>]  Snapshot the live tmux pane (interactive debugging)
-  restart <session> [--resume-id <codex_id>]  Kill (if needed) and relaunch tmux session via codex resume
+  status [<session>]         Show summary for all sessions or a specific one
+  logs <session> [stdout|stderr] [--lines N]
+        Print tails of stored stdout snapshot or stderr log
+  capture <session> [--lines N] [--output <file>]
+        Snapshot the live tmux pane (interactive debugging)
+  say <session> <message>
+        Inject a new user message into an interactive session via tmux send-keys
+  restart <session> [--resume-id <codex_id>]
+        Kill (if needed) and relaunch tmux session via codex resume
   kill <session> [--clear] Stop tmux session; optionally remove artifacts
   init                     Ensure tasks root exists and print quick help
   help                     Show this message
@@ -388,6 +393,47 @@ capture_session() {
   fi
 }
 
+say_session() {
+  local session=$1
+  shift || true
+  local message="$*"
+  if [[ -z "$session" || -z "$message" ]]; then
+    echo "Usage: ${SELF_PATH} say <session> <message>" >&2
+    exit 1
+  fi
+  require_session_dir "$session"
+  local dir
+  dir=$(session_dir "$session")
+  local meta_path="$dir/meta.json"
+  if [[ ! -f "$meta_path" ]]; then
+    echo "ERROR: $meta_path missing; cannot verify session type." >&2
+    exit 1
+  fi
+  local interactive
+  interactive=$(python3 - "$meta_path"<<'PY'
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+if not path.exists():
+    print("0")
+else:
+    data = json.loads(path.read_text())
+    print("1" if data.get("interactive") else "0")
+PY
+)
+  if [[ "$interactive" != "1" ]]; then
+    echo "ERROR: say command only works for interactive sessions." >&2
+    exit 1
+  fi
+  if ! is_tmux_running "$session"; then
+    echo "ERROR: tmux session $session not running." >&2
+    exit 1
+  fi
+  tmux send-keys -t "${session}:0.0" -- "$message"
+  tmux send-keys -t "${session}:0.0" C-m
+  echo "Sent to $session: $message"
+}
+
 restart_session() {
   local session=$1
   shift || true
@@ -497,6 +543,10 @@ case "$cmd" in
   capture)
     if [[ $# -lt 1 ]]; then usage; exit 1; fi
     capture_session "$@"
+    ;;
+  say)
+    if [[ $# -lt 2 ]]; then usage; exit 1; fi
+    say_session "$@"
     ;;
   restart)
     if [[ $# -lt 1 ]]; then usage; exit 1; fi
