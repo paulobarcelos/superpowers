@@ -430,8 +430,8 @@ PY
     exit 1
   fi
   tmux send-keys -t "${session}:0.0" -- "$message"
-  tmux send-keys -t "${session}:0.0" C-m
-  tmux send-keys -t "${session}:0.0" C-m
+  tmux send-keys -t "${session}:0.0" Enter
+  tmux send-keys -t "${session}:0.0" Enter
   echo "Sent to $session: $message"
 }
 
