@@ -21,7 +21,9 @@ Directly call the Google Sheets REST API (and Drive/Apps Script when needed) usi
 3. Scopes:
    - Full: `https://www.googleapis.com/auth/spreadsheets` and `https://www.googleapis.com/auth/drive`
    - Add read-only variants where possible.
-4. Helper script: `source skills/google-sheets-api/scripts/env-helpers.sh` (path announced when loading the skill) to export `BASE/DRIVE/SCRIPT_BASE`, helper `token()` + `H()` functions, and the `check_gsheets_auth` utility. The script lives alongside this skill so credentials stay local to the project.
+4. Helper scripts:
+   - `source skills/google-sheets-api/scripts/env-helpers.sh` once per shell to export `BASE/DRIVE/SCRIPT_BASE`, helper `token()`/`H()`, and `check_gsheets_auth`.
+   - For a persistent shell with everything preloaded, run `skills/google-sheets-api/scripts/sheets-shell.sh` which sources the helpers and drops you into `$SHELL` so every command can reuse the env vars without re-sourcing.
 
 ### Authentication workflow – simplest possible (global ADC)
 Most users should just run the standard gcloud workflow once and reuse it everywhere. When `check_gsheets_auth` fails, tell the human to do the following on their machine (with a browser):
@@ -65,8 +67,8 @@ If they insist on keeping credentials inside the repo, adapt the steps above but
 | Read formulas vs computed | `valueRenderOption==FORMULA` or `==UNFORMATTED_VALUE` on the GET endpoint |
 | Get `sheetId` | `http GET "$BASE/spreadsheets/$SPREADSHEET_ID" "$(H)" | jq -r '.sheets[] | select(.properties.title=="Data") | .properties.sheetId'` |
 | Batch format | Send `requests:[{repeatCell…},{autoResizeDimensions…}]` to `:batchUpdate` |
-| Data validation | `setDataValidation` request with `condition.type=ONE_OF_LIST`/`NUMBER_BETWEEN` |
-| Conditional formatting | `addConditionalFormatRule` with `booleanRule` or `gradientRule` |
+| Data validation | Use templates under `skills/google-sheets-api/templates/` (e.g., `set-data-validation-one-of-list.json`) and fill in `sheetId` via `jq --argjson sid` |
+| Conditional formatting | Templates provided (boolean + gradient). Load, tweak with `jq`, and POST to `:batchUpdate` |
 | Named range | `addNamedRange` |
 | Drive search | `http GET "$DRIVE/files" q=="name='Foo' and mimeType='application/vnd.google-apps.spreadsheet'"` |
 | Share file with human | `http --json POST "$DRIVE/files/$SPREADSHEET_ID/permissions" role=writer type=user emailAddress="human@example.com" "$(H)"` |
@@ -103,48 +105,44 @@ http GET "$BASE/spreadsheets/$SPREADSHEET_ID/values/Data!A1:C10" \
 
 ### Format + Auto-resize Columns
 ```bash
-SHEET_ID=$(http GET "$BASE/spreadsheets/$SPREADSHEET_ID" "$(H)" --print=b | jq -r '.sheets[] | select(.properties.title=="Data") | .properties.sheetId')
+SHEET_ID=$(http GET "$BASE/spreadsheets/$SPREADSHEET_ID" "$(H)" --print=b \
+  | jq -r '.sheets[] | select(.properties.title=="Data") | .properties.sheetId')
 
-jq -n --argjson sid "$SHEET_ID" '{requests:[
-  {repeatCell:{range:{sheetId:$sid,startRowIndex:0,endRowIndex:1},
-    cell:{userEnteredFormat:{textFormat:{bold:true}}},
-    fields:"userEnteredFormat.textFormat.bold"}},
-  {autoResizeDimensions:{dimensions:{sheetId:$sid,dimension:"COLUMNS",startIndex:0,endIndex:3}}}
-]}' | http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
+jq --argjson sid "$SHEET_ID" \
+   '.requests[0].repeatCell.range.sheetId=$sid |
+    .requests[1].autoResizeDimensions.dimensions.sheetId=$sid' \
+   skills/google-sheets-api/templates/format-header-autosize.json \
+| http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
 ```
 
 ### Data Validation Examples
-Dropdown:
+Dropdown (template-driven):
 ```bash
-jq -n --argjson sid "$SHEET_ID" '{requests:[{setDataValidation:{range:{sheetId:$sid,startRowIndex:1,endRowIndex:100,startColumnIndex:0,endColumnIndex:1},
-  rule:{condition:{type:"ONE_OF_LIST",values:[
-    {userEnteredValue:"Apples"},{userEnteredValue:"Oranges"},{userEnteredValue:"Bananas"}
-  ]},inputMessage:"Choose an item",strict:true,showCustomUi:true}}}]}' \
-| http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
-```
-Number between 0 and 100:
-```bash
-jq -n --argjson sid "$SHEET_ID" '{requests:[{setDataValidation:{range:{sheetId:$sid,startRowIndex:1,endRowIndex:100,startColumnIndex:1,endColumnIndex:2},
-  rule:{condition:{type:"NUMBER_BETWEEN",values:[{userEnteredValue:"0"},{userEnteredValue:"100"}]},inputMessage:"Enter 0–100",strict:true}}}]}' \
+jq --argjson sid "$SHEET_ID" \
+   '.requests[0].setDataValidation.range.sheetId=$sid |
+    .requests[0].setDataValidation.rule.condition.values=[
+      {"userEnteredValue":"Apples"},
+      {"userEnteredValue":"Oranges"},
+      {"userEnteredValue":"Bananas"}
+    ]' \
+   skills/google-sheets-api/templates/set-data-validation-one-of-list.json \
 | http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
 ```
 
 ### Conditional Formatting Examples
-Greater-than rule:
+Greater-than rule (template):
 ```bash
-jq -n --argjson sid "$SHEET_ID" '{requests:[{addConditionalFormatRule:{rule:{
-  ranges:[{sheetId:$sid,startRowIndex:1,startColumnIndex:0,endColumnIndex:3}],
-  booleanRule:{condition:{type:"CUSTOM_FORMULA",values:[{userEnteredValue:"=$C2>10"}]},
-  format:{backgroundColor:{red:0.85,green:0.97,blue:0.88}}}},index:0}}]}' \
+jq --argjson sid "$SHEET_ID" --arg formula "=$C2>10" \
+   '.requests[0].addConditionalFormatRule.rule.ranges[0].sheetId=$sid |
+    .requests[0].addConditionalFormatRule.rule.booleanRule.condition.values[0].userEnteredValue=$formula' \
+   skills/google-sheets-api/templates/conditional-format-greater-than.json \
 | http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
 ```
-Color scale:
+Color scale (template):
 ```bash
-jq -n --argjson sid "$SHEET_ID" '{requests:[{addConditionalFormatRule:{rule:{
-  ranges:[{sheetId:$sid,startRowIndex:1,endRowIndex:100,startColumnIndex:2,endColumnIndex:3}],
-  gradientRule:{minpoint:{type:"MIN",color:{red:0.90,green:0.95,blue:1.00}},
-                midpoint:{type:"PERCENTILE",value:"50",color:{red:1,green:1,blue:1}},
-                maxpoint:{type:"MAX",color:{red:0.98,green:0.90,blue:0.90}}}},index:0}}]}' \
+jq --argjson sid "$SHEET_ID" \
+   '.requests[0].addConditionalFormatRule.rule.ranges[0].sheetId=$sid' \
+   skills/google-sheets-api/templates/conditional-format-gradient.json \
 | http --json POST "$BASE/spreadsheets/$SPREADSHEET_ID:batchUpdate" "$(H)" --print=b | jq .
 ```
 

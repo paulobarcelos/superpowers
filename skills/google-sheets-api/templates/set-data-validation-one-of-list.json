@@ -1,0 +1,28 @@
+{
+  "requests": [
+    {
+      "setDataValidation": {
+        "range": {
+          "sheetId": 0,
+          "startRowIndex": 1,
+          "endRowIndex": 100,
+          "startColumnIndex": 0,
+          "endColumnIndex": 1
+        },
+        "rule": {
+          "condition": {
+            "type": "ONE_OF_LIST",
+            "values": [
+              { "userEnteredValue": "Option A" },
+              { "userEnteredValue": "Option B" },
+              { "userEnteredValue": "Option C" }
+            ]
+          },
+          "strict": true,
+          "showCustomUi": true,
+          "inputMessage": "Choose a value"
+        }
+      }
+    }
+  ]
+}

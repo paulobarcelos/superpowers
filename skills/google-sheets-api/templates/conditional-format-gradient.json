@@ -1,0 +1,25 @@
+{
+  "requests": [
+    {
+      "addConditionalFormatRule": {
+        "rule": {
+          "ranges": [
+            {
+              "sheetId": 0,
+              "startRowIndex": 1,
+              "endRowIndex": 100,
+              "startColumnIndex": 2,
+              "endColumnIndex": 3
+            }
+          ],
+          "gradientRule": {
+            "minpoint": { "type": "MIN", "color": { "red": 0.90, "green": 0.95, "blue": 1.00 } },
+            "midpoint": { "type": "PERCENTILE", "value": "50", "color": { "red": 1.0, "green": 1.0, "blue": 1.0 } },
+            "maxpoint": { "type": "MAX", "color": { "red": 0.98, "green": 0.90, "blue": 0.90 } }
+          }
+        },
+        "index": 0
+      }
+    }
+  ]
+}

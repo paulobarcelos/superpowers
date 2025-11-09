@@ -1,0 +1,30 @@
+{
+  "requests": [
+    {
+      "addConditionalFormatRule": {
+        "rule": {
+          "ranges": [
+            {
+              "sheetId": 0,
+              "startRowIndex": 1,
+              "startColumnIndex": 0,
+              "endColumnIndex": 4
+            }
+          ],
+          "booleanRule": {
+            "condition": {
+              "type": "CUSTOM_FORMULA",
+              "values": [
+                { "userEnteredValue": "=$C2>10" }
+              ]
+            },
+            "format": {
+              "backgroundColor": { "red": 0.85, "green": 0.97, "blue": 0.88 }
+            }
+          }
+        },
+        "index": 0
+      }
+    }
+  ]
+}
