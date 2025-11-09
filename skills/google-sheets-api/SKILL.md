@@ -53,7 +53,8 @@ If they insist on keeping credentials inside the repo, adapt the steps above but
 3. **Fetch `sheetId`s** when you need range-based batch updates; store them in env vars.
 4. **Use Sheets `values` endpoints** for raw cell data; use `spreadsheets.batchUpdate` for structural / formatting / validation work.
 5. **Share access** – if using a service account, make sure the resulting sheet is shared with the human’s email via the Drive API or manual sharing so they can inspect it.
-6. **Log sparingly** – prefer `--print=b` to suppress headers, and pipe to `jq` to pull only the fields you need.
+6. **Sheet IDs may be large integers** – always extract them via `jq -r '.properties.sheetId'` and store them as env vars (strings are fine) so JSON precision issues don’t arise.
+7. **Log sparingly** – prefer `--print=b` to suppress headers, and pipe to `jq` to pull only the fields you need.
 
 ## Quick Reference
 | Goal | Command Snippet |
