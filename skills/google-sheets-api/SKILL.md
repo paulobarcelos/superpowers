@@ -22,8 +22,9 @@ Directly call the Google Sheets REST API (and Drive/Apps Script when needed) usi
    - Full: `https://www.googleapis.com/auth/spreadsheets` and `https://www.googleapis.com/auth/drive`
    - Add read-only variants where possible.
 4. Helper scripts:
-   - `source skills/google-sheets-api/scripts/env-helpers.sh` once per shell to export `BASE/DRIVE/SCRIPT_BASE`, helper `token()`/`H()`, and `check_gsheets_auth`.
-   - For a persistent shell with everything preloaded, run `skills/google-sheets-api/scripts/sheets-shell.sh` which sources the helpers and drops you into `$SHELL` so every command can reuse the env vars without re-sourcing.
+   - `source skills/google-sheets-api/scripts/env-helpers.sh` once per shell to export `BASE/DRIVE/SCRIPT_BASE`, helper `token()`/`H()`, `http_sheets()` (HTTPie wrapper that automatically adds the auth + quota headers), and `check_gsheets_auth`.
+   - For long sessions run `skills/google-sheets-api/scripts/sheets-shell.sh` (it sources the helpers then execs `$SHELL`) so you don’t have to re-source before every command.
+5. Optional: set `export GCLOUD_QUOTA_PROJECT=<project-id>` so every `http_sheets` call automatically adds the `X-Goog-User-Project` header.
 
 ### Authentication workflow – simplest possible (global ADC)
 Most users should just run the standard gcloud workflow once and reuse it everywhere. When `check_gsheets_auth` fails, tell the human to do the following on their machine (with a browser):

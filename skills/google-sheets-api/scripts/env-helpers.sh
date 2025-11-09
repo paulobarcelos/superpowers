@@ -16,6 +16,11 @@ H() {
   echo "Authorization:Bearer $(token)"
 }
 
+# HTTPie wrapper that always sends auth (and quota project if GCLOUD_QUOTA_PROJECT is set).
+http_sheets() {
+  http "${@}" "$(H)" ${GCLOUD_QUOTA_PROJECT:+"X-Goog-User-Project:${GCLOUD_QUOTA_PROJECT}"}
+}
+
 # Quick check to ensure credentials exist before running API calls.
 check_gsheets_auth() {
   if ! gcloud auth application-default print-access-token >/dev/null 2>&1; then
