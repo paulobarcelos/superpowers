@@ -23,38 +23,29 @@ Directly call the Google Sheets REST API (and Drive/Apps Script when needed) usi
    - Add read-only variants where possible.
 4. Helper script: `source skills/google-sheets-api/scripts/env-helpers.sh` (path announced when loading the skill) to export `BASE/DRIVE/SCRIPT_BASE`, helper `token()` + `H()` functions, and the `check_gsheets_auth` utility. The script lives alongside this skill so credentials stay local to the project.
 
-### Credential strategies (pick one) + exact instructions for the human
-When `check_gsheets_auth` fails, respond with the following options and pause until the human confirms which they completed:
-
-1. **Repo-local ADC (recommended)**  
+### Authentication workflow – simplest possible (global ADC)
+Most users should just run the standard gcloud workflow once and reuse it everywhere. When `check_gsheets_auth` fails, tell the human to do the following on their machine (with a browser):
+1. **Pick or create a GCP project ID** (e.g., `gsheets-skill-123`). If they don’t have one:
+   ```bash
+   gcloud projects create gsheets-skill-123 --name="Google Sheets Skill"
    ```
-   export CLOUDSDK_CONFIG=/PATH/TO/PROJECT/.google/gcloud-config
-   mkdir -p "$CLOUDSDK_CONFIG"
-   gcloud auth application-default revoke || true
+2. **Authenticate globally** (uses the active account configured in gcloud):
+   ```bash
+   gcloud auth login
+   gcloud config set project gsheets-skill-123
    gcloud auth application-default login \
      --scopes=https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/drive
-   gcloud auth application-default set-quota-project <project-id>
+   gcloud auth application-default set-quota-project gsheets-skill-123
    ```
-   - Tell them they can add `export CLOUDSDK_CONFIG=…` to their local shell init so this config applies only to this repo.
-   - If `gcloud` keeps referencing the wrong account/project, have them run `gcloud config unset account`, `unset project`, or explicitly `gcloud config set account you@domain.com` before the login.
-2. **Service-account JSON scoped to this repo**  
+   - If the wrong account/project keeps appearing, have them run `gcloud config unset account`, `gcloud config unset project`, or explicitly `gcloud config set account you@domain.com` before the login; they can also run `gcloud auth application-default revoke` to clear stale tokens.
+3. **Enable APIs (first time only)**
+   ```bash
+   gcloud services enable sheets.googleapis.com drive.googleapis.com --project=gsheets-skill-123
    ```
-   gcloud iam service-accounts create sheets-skill-bot --display-name="Sheets Skill Bot"
-   gcloud iam service-accounts keys create /PATH/TO/PROJECT/.google/gsheets-skill-key.json \
-     --iam-account=sheets-skill-bot@<project-id>.iam.gserviceaccount.com
-   gcloud projects add-iam-policy-binding <project-id> \
-     --member="serviceAccount:sheets-skill-bot@<project-id>.iam.gserviceaccount.com" \
-     --role="roles/editor"
-   export GOOGLE_APPLICATION_CREDENTIALS=/PATH/TO/PROJECT/.google/gsheets-skill-key.json
-   ```
-   - Warn that service accounts must belong to a domain licensed for Drive/Sheets; otherwise sheet creation fails with `PERMISSION_DENIED`.
-   - Remind them to share any created sheet back to their human account so they can view it.
+4. Once they confirm the commands succeeded, rerun `check_gsheets_auth`. Continue only after it passes.
 
-### Check authentication before doing anything
-1. Run `source skills/google-sheets-api/scripts/env-helpers.sh` and `check_gsheets_auth`.
-2. If it fails, reply with the instructions above (mention which steps to run, including clearing old config with `gcloud config unset account/project` or `gcloud auth application-default revoke` when relevant) and **stop**. Do not keep retrying `gcloud login` from Codex.
-3. Wait for the human to confirm they completed one of the setups. Then rerun `check_gsheets_auth`. Only proceed once it succeeds.
-4. If the human chooses the service-account path and you detect `PERMISSION_DENIED` or `storageQuotaExceeded`, explain that the SA cannot own Sheets and they should switch to user ADC or share an existing sheet.
+### Optional: project-local credentials
+If they insist on keeping credentials inside the repo, adapt the steps above but prepend `export CLOUDSDK_CONFIG=/path/to/project/.google/gcloud-config` before running gcloud commands. Otherwise the global ADC approach is fine.
 
 ## Core Workflow
 1. **Authenticate** per the strategy above (repo-local ADC or service account). Always run `check_gsheets_auth` after sourcing the helper; halt if it fails and tell the human what to do.
